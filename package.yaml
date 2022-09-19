@@ -20,6 +20,10 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
+- discord-haskell
+- persistent
+- persistent-sqlite
+- persistent-template
 
 ghc-options:
 - -Wall
@@ -27,7 +31,6 @@ ghc-options:
 - -Widentities
 - -Wincomplete-record-updates
 - -Wincomplete-uni-patterns
-- -Wmissing-export-lists
 - -Wmissing-home-modules
 - -Wpartial-fields
 - -Wredundant-constraints
@@ -45,6 +48,9 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - aywins
+    when:
+    - condition: false
+      other-modules: Paths_aywins
 
 tests:
   aywins-test:
@@ -56,3 +62,6 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - aywins
+    when:
+    - condition: false
+      other-modules: Paths_aywins

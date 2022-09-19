@@ -15,9 +15,12 @@
 
         haskell-pkgs = pkgs.haskell.packages.ghc902;
 
+        buildStackProject = pkgs.haskell.lib.buildStackProject;
+
         stack-wrapped = pkgs.symlinkJoin {
           name = "stack";
           paths = [ pkgs.stack ];
+          version = pkgs.stack.version;
           buildInputs = [ pkgs.makeWrapper ];
           postBuild = ''
             wrapProgram $out/bin/stack \
@@ -35,6 +38,7 @@
 
         (with pkgs; [
           sqlite
+          zlib
         ]) ++
 
         (with haskell-pkgs; [
@@ -46,6 +50,22 @@
         ]);
 
       in {
+        packages.default = pkgs.callPackage buildStackProject {
+          name = "aywins";
+          version = "0.0.1";
+          src = ./.;
+
+          ghc = haskell-pkgs.ghc;
+          stack = stack-wrapped;
+          extraArgs = [ 
+            "--option sandbox false"
+          ];
+          buildInputs = with pkgs; [
+            sqlite
+            zlib
+          ];
+        };
+
         devShells.default = pkgs.mkShell {
           buildInputs = devTools;
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath devTools;

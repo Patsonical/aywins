@@ -28,21 +28,27 @@ library
       Paths_aywins
   hs-source-dirs:
       src
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       base >=4.7 && <5
+    , discord-haskell
+    , persistent
+    , persistent-sqlite
+    , persistent-template
   default-language: Haskell2010
 
 executable aywins-exe
   main-is: Main.hs
-  other-modules:
-      Paths_aywins
   hs-source-dirs:
       app
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aywins
     , base >=4.7 && <5
+    , discord-haskell
+    , persistent
+    , persistent-sqlite
+    , persistent-template
   default-language: Haskell2010
 
 test-suite aywins-test
@@ -52,8 +58,12 @@ test-suite aywins-test
       Paths_aywins
   hs-source-dirs:
       test
-  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aywins
     , base >=4.7 && <5
+    , discord-haskell
+    , persistent
+    , persistent-sqlite
+    , persistent-template
   default-language: Haskell2010
