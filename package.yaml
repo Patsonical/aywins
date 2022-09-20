@@ -29,6 +29,7 @@ dependencies:
 - time
 - bytestring
 - bytestring-conversion
+- transformers
 
 ghc-options:
 - -Wall

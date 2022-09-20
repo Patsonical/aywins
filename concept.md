@@ -21,19 +21,13 @@
 ## Database Model
 
 **Game**
-- Name :: String [PK]
-- Total Wins :: Int
-- Latest Winner :: discord_id
-- Last Won Date :: Date
-- Wins :: 1-M:Win
+- Name :: String
 
 **User**
-- Discord ID :: discord_id [PK]
-- Total Wins :: Int
-- Wins :: 1-M:Win
+- Discord ID :: ~~DiscordId~~ ByteString
 
-**Win**
-- ID :: CompK:User+Game+Date
+**Score**
 - User :: FK:User
 - Game :: FK:Game
-- Date :: Date
+- Value :: Int
+- LastWin :: UTCTime
