@@ -25,6 +25,10 @@ dependencies:
 - persistent
 - persistent-sqlite
 - persistent-template
+- text
+- time
+- bytestring
+- bytestring-conversion
 
 ghc-options:
 - -Wall
