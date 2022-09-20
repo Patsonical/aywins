@@ -32,6 +32,7 @@ library
   build-depends:
       base >=4.7 && <5
     , discord-haskell
+    , esqueleto
     , persistent
     , persistent-sqlite
     , persistent-template
@@ -46,6 +47,7 @@ executable aywins-exe
       aywins
     , base >=4.7 && <5
     , discord-haskell
+    , esqueleto
     , persistent
     , persistent-sqlite
     , persistent-template
@@ -61,6 +63,7 @@ test-suite aywins-test
       aywins
     , base >=4.7 && <5
     , discord-haskell
+    , esqueleto
     , persistent
     , persistent-sqlite
     , persistent-template
