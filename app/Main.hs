@@ -14,7 +14,7 @@ main = runSqlite "db.sqlite3" $ do
   runMigration migrateAll
   btId <- insert $ Game "Betrayal" 0
   bt <- get btId
-  usId <- insert $ User "test discord id" 0
+  usId <- insert $ User "test discord id" 0 False
   us <- get usId
   wId  <- insert $ Win usId btId t
   w <- get wId
