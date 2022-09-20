@@ -1,5 +1,6 @@
 .direnv/
 .stack-work/
+db.sqlite3
 resources/
 result/
 *~

@@ -23,14 +23,17 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 Game
   name Text
   totalWins Int
+  deriving Eq Show
 
 User
   discordId ByteString
   totalWins Int
+  deriving Eq Show
 
 Win
   user UserId
   game GameId
   date UTCTime
+  deriving Eq Show
 
 |]
