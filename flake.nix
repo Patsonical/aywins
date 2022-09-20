@@ -32,22 +32,24 @@
           '';
         };
 
-        devTools = [
+        raw-deps = [
           stack-wrapped
-        ] ++
+        ];
 
-        (with pkgs; [
+        pkgs-deps = with pkgs; [
           sqlite
           zlib
-        ]) ++
+        ];
 
-        (with haskell-pkgs; [
+        hs-deps = with haskell-pkgs; [
           ghc
           hlint
           hoogle
           haskell-language-server
           implicit-hie
-        ]);
+        ];
+
+        devTools = raw-deps ++ pkgs-deps ++ hs-deps;
 
       in {
         packages.default = pkgs.callPackage buildStackProject {
@@ -57,13 +59,7 @@
 
           ghc = haskell-pkgs.ghc;
           stack = stack-wrapped;
-          extraArgs = [ 
-            "--option sandbox false"
-          ];
-          buildInputs = with pkgs; [
-            sqlite
-            zlib
-          ];
+          buildInputs = pkgs-deps;
         };
 
         devShells.default = pkgs.mkShell {
