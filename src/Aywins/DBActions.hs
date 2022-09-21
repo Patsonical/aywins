@@ -1,11 +1,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE RankNTypes #-}
 
-module Aywins.DBActions
-  ( getOrInsert
-  , setScore
-  , addWin
-  ) where
+module Aywins.DBActions where
 
 import Aywins.Types
 import Aywins.Entities
@@ -13,6 +9,8 @@ import Aywins.Entities
 import Database.Persist.Sqlite
 import Control.Monad.IO.Class (MonadIO(..))
 import Data.Time (getCurrentTime)
+import Data.ByteString (ByteString)
+import Data.Text (Text)
 
 getOrInsert :: (PersistEntity record,
   PersistEntityBackend record ~ SqlBackend) =>
@@ -33,6 +31,18 @@ getOrInsert unique default_ = do
 --  if userBanned user then
 --    pure $ Left "User is banned, ignoring setting"
 
+getOrDefaultUser :: ByteString -> SqlAction (Entity User)
+getOrDefaultUser idbs = getOrInsert (UniqueUserDiscordId idbs)
+                                    (User idbs False)
+
+getOrDefaultGame :: Text -> SqlAction (Entity Game)
+getOrDefaultGame gtxt = getOrInsert (UniqueGameName gtxt)
+                                    (Game gtxt)
+
+getOrDefaultWins :: Key User -> Key Game -> SqlAction (Entity Wins)
+getOrDefaultWins user game = getOrInsert (UniqueWinUserGame user game)
+                                         (Wins user game 0 Nothing)
+
 setScore :: ScoreMod -> Entity User -> Entity Game -> SqlAction (Key Wins)
 setScore scoreMod (Entity userId _) (Entity gameId _) = do
 
@@ -41,8 +51,7 @@ setScore scoreMod (Entity userId _) (Entity gameId _) = do
       isInc (Inc _) = True
       isInc _       = False
 
-  Entity winsId wins <- getOrInsert (UniqueWinUserGame userId gameId)
-                                    (Wins userId gameId 0 Nothing)
+  Entity winsId wins <- getOrDefaultWins userId gameId
 
   let currentScore = winsScore wins
   timeNow <- liftIO getCurrentTime
