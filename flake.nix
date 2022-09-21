@@ -47,6 +47,7 @@
           hlint
           hoogle
           haskell-language-server
+          hls-tactics-plugin
           implicit-hie
         ];
 

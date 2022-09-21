@@ -25,9 +25,10 @@
 
 **User**
 - Discord ID :: ~~DiscordId~~ ByteString
+- Banned :: Bool
 
-**Score**
+**Wins**
 - User :: FK:User
 - Game :: FK:Game
-- Value :: Int
+- Score :: Int
 - LastWin :: UTCTime

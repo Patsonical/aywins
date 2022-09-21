@@ -17,7 +17,12 @@ import Data.ByteString.Conversion (toByteString')
 
 type SqlAction a = forall m. MonadIO m => ReaderT SqlBackend m a
 type ErrorMsg = Text
-type IsAywinsAdmin = Bool
+
+data ScoreMod = Set Int | Inc Int | Dec Int
+scoreModToFunc :: ScoreMod -> (Int -> Int)
+scoreModToFunc (Set n) = const n
+scoreModToFunc (Inc n) = (+ n)
+scoreModToFunc (Dec n) = \x -> x - n
 
 getOrInsert :: (PersistEntity record,
   PersistEntityBackend record ~ SqlBackend) =>
@@ -30,48 +35,39 @@ getOrInsert unique default_ = do
       pure $ Entity recordId default_
     Just entity -> pure entity
 
-setScore :: IsAywinsAdmin -> Text -> Word64 -> (Int -> Int) -> SqlAction (Either ErrorMsg ())
-setScore isAdmin gameNameRaw discordIdRaw scoreMod = do
+setScore :: ScoreMod -> Word64 -> Text -> SqlAction (Either ErrorMsg ())
+setScore scoreMod discordIdRaw gameNameRaw = do
 
   let discordIdBytestring = toByteString' discordIdRaw
+      smfn = scoreModToFunc scoreMod
+      isInc :: ScoreMod -> Bool
+      isInc (Inc _) = True
+      isInc _       = False
 
-  Entity gameId game <- getOrInsert (UniqueGameName gameNameRaw)
-                                    (Game gameNameRaw 0)
-  Entity userId user <- getOrInsert (UniqueDiscordId discordIdBytestring)
-                                    (User discordIdBytestring 0 False)
-
-  let oldUserScore = userTotalWins user
-      newUserScore = max 0 $ scoreMod oldUserScore
-      difference   = newUserScore - oldUserScore
-      newGameScore = max 0 $ gameTotalWins game + difference
-
-  if userBanned user && not isAdmin then
-    pure $ Left "User is banned, ignoring setting"
-  else do
-    timeNow <- liftIO getCurrentTime
-    _ <- insert $ SetScore userId gameId timeNow difference
-    update gameId [ GameTotalWins =. newGameScore ]
-    update userId [ UserTotalWins =. newUserScore ]
-    pure $ Right ()
-
-addWin :: IsAywinsAdmin -> Text -> Word64 -> SqlAction (Either ErrorMsg ())
-addWin isAdmin gameNameRaw discordIdRaw = do
-
-  let discordIdBytestring = toByteString' discordIdRaw
-
+  Entity userId user <- getOrInsert (UniqueUserDiscordId discordIdBytestring)
+                                    (User discordIdBytestring False)
   Entity gameId _    <- getOrInsert (UniqueGameName gameNameRaw)
-                                    (Game gameNameRaw 0)
-  Entity userId user <- getOrInsert (UniqueDiscordId discordIdBytestring)
-                                    (User discordIdBytestring 0 False)
+                                    (Game gameNameRaw)
+  Entity winsId wins <- getOrInsert (UniqueWinUserGame userId gameId)
+                                    (Wins userId gameId 0 Nothing)
 
-  if userBanned user && not isAdmin then
-    pure $ Left "User is banned, ignoring win"
+  if userBanned user then
+    pure $ Left "User is banned, ignoring setting"
+
   else do
+    let currentScore = winsScore wins
     timeNow <- liftIO getCurrentTime
-    _ <- insert $ Win userId gameId timeNow
-    update gameId [ GameTotalWins +=. 1 ]
-    update userId [ UserTotalWins +=. 1 ]
+
+    if isInc scoreMod then
+      update winsId [ WinsScore =. smfn currentScore, WinsLastWinDate =. Just timeNow ]
+
+    else
+      update winsId [ WinsScore =. smfn currentScore ]
+
     pure $ Right ()
+
+addWin :: Word64 -> Text -> SqlAction (Either ErrorMsg ())
+addWin = setScore (Inc 1)
 
 main :: IO ()
 main = runSqlite "db.sqlite3" $ do

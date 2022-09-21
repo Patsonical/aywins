@@ -20,30 +20,29 @@ import Data.ByteString ( ByteString )
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 
+User
+  discordId ByteString
+  banned Bool default=False
+  UniqueUserDiscordId discordId
+  deriving Eq Show
+
 Game
   name Text
-  totalWins Int default=0
   UniqueGameName name
   deriving Eq Show
 
-User
-  discordId ByteString
-  totalWins Int default=0
-  banned Bool default=False
-  UniqueDiscordId discordId
+GameAlias
+  name Text
+  link GameId
+  UniqueGameAliasName name
   deriving Eq Show
 
-Win
+Wins
   user UserId
   game GameId
-  date UTCTime default=CURRENT_TIME
-  deriving Eq Show
-
-SetScore
-  user UserId
-  game GameId
-  date UTCTime default=CURRENT_TIME
-  val Int
+  score Int default=0
+  lastWinDate UTCTime Maybe
+  UniqueWinUserGame user game
   deriving Eq Show
 
 |]
