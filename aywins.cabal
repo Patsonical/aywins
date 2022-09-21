@@ -24,7 +24,8 @@ source-repository head
 library
   exposed-modules:
       Aywins.DBActions
-      Aywins.Discord
+      Aywins.Discord.Backend
+      Aywins.Discord.Commands
       Aywins.Entities
       Aywins.Lib
       Aywins.Types

@@ -2,7 +2,8 @@
 {-# LANGUAGE LambdaCase #-}
 
 module Aywins.Types 
-  ( SqlAction
+  ( Aywins
+  , SqlAction
   , ErrorMsg
   , Status
   , ScoreMod(..)
@@ -14,8 +15,11 @@ import Control.Monad.Trans.Reader (ReaderT)
 import Database.Persist.Sqlite (SqlBackend)
 import Data.Text (Text)
 
+type Aywins a = ReaderT SqliteConnStr IO a
+
 type SqlAction a = forall m. MonadIO m => ReaderT SqlBackend m a
 type ErrorMsg = Text
+type SqliteConnStr = Text
 type Status = Maybe ErrorMsg
 
 data ScoreMod = Set Int | Inc Int | Dec Int
