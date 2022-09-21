@@ -8,9 +8,12 @@
 - `/amiwinning <game?>`: Get your score for all games or a specific one
 - `/aretheywinning <user> <game?>`: Get another user's score for all games or a specific one
 - `/whoiswinning <game?>`: Get global leaderboards for all games or a specific one
+- `/addself`: Manually add self
+- `/rmself`: Remove self from AYWinS
 - `/aywins-help`: Display help
 
 **Admin** (using an *AywinsAdmin* role)
+- `/theywon <user> <game>`: Increment <user>'s score in <game>
 - `/setscore <user?> <n> <game>`: Same as the user version, but can target any user instead of just self
 - `/addgame <game>`: Manually add game listing
 - `/rmgame <game>`: Remove game listing (and associated scores)

@@ -11,12 +11,12 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# OPTIONS_GHC -Wno-name-shadowing #-}
 
-module Entities where
+module Aywins.Entities where
 
+import Data.ByteString (ByteString)
+import Data.Text       (Text)
+import Data.Time       (UTCTime)
 import Database.Persist.TH
-import Data.Text ( Text )
-import Data.Time ( UTCTime )
-import Data.ByteString ( ByteString )
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 
