@@ -31,12 +31,6 @@ Game
   UniqueGameName name
   deriving Eq Show
 
-GameAlias
-  name Text
-  link GameId
-  UniqueGameAliasName name
-  deriving Eq Show
-
 Wins
   user UserId
   game GameId
