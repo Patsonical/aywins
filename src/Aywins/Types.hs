@@ -1,14 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE LambdaCase #-}
 
-module Aywins.Types 
-  ( SqlAction
-  , ErrorMsg
-  , Status
-  , ScoreMod(..)
-  , scoreModToFn
-  , Command(..)
-  ) where
+module Aywins.Types where
 
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Trans.Reader (ReaderT)
@@ -19,7 +12,8 @@ import Discord.Types (UserId)
 type SqlAction a = forall m. MonadIO m => ReaderT SqlBackend m a
 type ErrorMsg = Text
 type SqliteConnStr = Text
-type Status = Maybe ErrorMsg
+
+data Status = Success | Error ErrorMsg | Warning ErrorMsg | Message Text
 
 data ScoreMod = Set Int | Inc Int | Dec Int
   deriving (Show, Eq)
