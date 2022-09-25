@@ -13,7 +13,7 @@ type SqlAction a = forall m. MonadIO m => ReaderT SqlBackend m a
 type ErrorMsg = Text
 type SqliteConnStr = Text
 
-data Status = Success | Error ErrorMsg | Warning ErrorMsg | Message Text
+data Status = Success | Error ErrorMsg | Warning ErrorMsg | Response Text
 
 data ScoreMod = Set Int | Inc Int | Dec Int
   deriving (Show, Eq)

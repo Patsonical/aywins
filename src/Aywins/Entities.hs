@@ -22,7 +22,7 @@ share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
 
 User
   discordId ByteString
-  banned Bool default=False
+  banned    Bool       default=False
   UniqueUserDiscordId discordId
   deriving Eq Show
 
@@ -32,9 +32,9 @@ Game
   deriving Eq Show
 
 Wins
-  user UserId
-  game GameId
-  score Int default=0
+  user        UserId  OnDeleteCascade OnUpdateCascade
+  game        GameId  OnDeleteCascade OnUpdateCascade
+  score       Int     default=0
   lastWinDate UTCTime Maybe
   UniqueWinUserGame user game
   deriving Eq Show
