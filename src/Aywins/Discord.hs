@@ -1,6 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TypeApplications #-}
+{-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
+{-# HLINT ignore "Fuse on/on" #-}
 
 module Aywins.Discord where
 
@@ -11,26 +15,34 @@ import Data.Bifunctor (Bifunctor(bimap))
 import Data.ByteString (ByteString)
 import Data.ByteString.Conversion (toByteString')
 import Data.List (partition, uncons)
-import Data.Maybe (isJust, fromJust)
+import Data.Maybe (isJust, fromJust, fromMaybe)
 import Data.Text (Text)
 import Data.Traversable (forM)
 import Data.Word (Word64)
-import Database.Persist
-import Database.Persist.Sqlite (runSqlite)
+import Database.Persist.Sqlite (runSqlite, getBy)
 import qualified Data.Text as T
-import qualified Database.Esqueleto as E
 import qualified Discord.Types as D
+import qualified Database.Esqueleto.Experimental as E
+import Database.Esqueleto.Experimental hiding (Entity(..), insert, update, delete, (=.))
+import qualified Database.Persist as P
+import Database.Persist (Entity (..), insert, update, delete, (=.))
 
 -- Temp "global" variables --
 isAdmin :: Bool
 isAdmin = True
 
-discordUser :: D.UserId
-discordUser = D.DiscordId . D.Snowflake $ (123456789 :: Word64)
+globalUserId :: D.UserId
+globalUserId = D.DiscordId . D.Snowflake $ (123456789 :: Word64)
+
+globalUser :: D.User
+globalUser = error "USER"
 -- --
 
 idToByteString :: D.DiscordId a -> ByteString
 idToByteString = toByteString' . D.unSnowflake . D.unId
+
+discordUserToBS :: D.User -> ByteString
+discordUserToBS = idToByteString . D.userId
 
 adminCheck :: SqlAction Status -> SqlAction Status
 adminCheck authAction = if isAdmin then authAction else pure $ Error notAdminError
@@ -47,11 +59,52 @@ helpMessageUser = ""
 helpMessageAdmin :: Text
 helpMessageAdmin = ""
 
+getSingleUserScores :: D.User -> Maybe Text -> SqlAction Status
+getSingleUserScores discordUser = \case
+  Nothing    -> do
+  -- SELECT       game, score
+  --   FROM       Wins
+  --   INNER_JOIN User ON Wins.user = User.id
+  --   INNER_JOIN Game ON Wins.game = Game.id
+  --   WHERE      User.discordId == idToByteString discordUser
+    results <- select $ do
+      (wins :& user :& game) <- from $ table @Wins
+        `innerJoin` table @User `on` (\(w :& u)      -> w ^. #user ==. u ^. #id)
+        `innerJoin` table @Game `on` (\(w :& _ :& g) -> w ^. #game ==. g ^. #id)
+      where_ (user ^. #discordId ==. val (discordUserToBS discordUser))
+      pure (game ^. #name, wins ^. #score)
+    pure . Message
+         . fmtResponse
+         . SingleUserResponse discordUser
+         . map (bimap unValue unValue)
+         $ results
+
+  Just gName -> do
+  -- SELECT       score
+  --   FROM       Wins
+  --   INNER_JOIN User ON Wins.user = User.id
+  --   INNER_JOIN Game ON Wins.game = Game.id
+  --   WHERE      User.discordId == idToByteString discordUser
+  --     AND      Game.name == gName
+    results <- selectOne $ do
+      (wins :& user :& game) <- from $ table @Wins
+        `innerJoin` table @User `on` (\(w :& u)      -> w ^. #user ==. u ^. #id)
+        `innerJoin` table @Game `on` (\(w :& _ :& g) -> w ^. #game ==. g ^. #id)
+      where_ (user ^. #discordId ==. val (discordUserToBS discordUser))
+      where_ (game ^. #name ==. val gName)
+      pure (wins ^. #score)
+    pure . Message
+         . fmtResponse
+         . ScoreResponse discordUser gName
+         . unValue
+         . fromMaybe (Value 0)
+         $ results
+
 cmdTest :: Command -> IO Status
 cmdTest cmd = runSqlite "db.sqlite3" $ case cmd of
 
   Iwon gName -> do
-    user <- getOrDefaultUser (idToByteString discordUser)
+    user <- getOrDefaultUser (idToByteString globalUserId)
     if (userBanned . entityVal) user then
       pure $ Error userBannedError
     else do
@@ -59,14 +112,14 @@ cmdTest cmd = runSqlite "db.sqlite3" $ case cmd of
       _    <- addWin user game
       pure Success
 
-  Setscore uId_maybe scoreMod gName -> do
-    targeting <- case uId_maybe of
+  Setscore discordUser_maybe scoreMod gName -> do
+    targeting <- case discordUser_maybe of
       Just target -> if isAdmin then
-          Right <$> getOrDefaultUser (idToByteString target)
+          Right <$> getOrDefaultUser (discordUserToBS target)
         else
           pure $ Left notAdminError
       Nothing -> do
-        user <- getOrDefaultUser (idToByteString discordUser)
+        user <- getOrDefaultUser (idToByteString globalUserId)
         if (userBanned . entityVal) user && not isAdmin then
           pure $ Left userBannedError
         else
@@ -79,33 +132,25 @@ cmdTest cmd = runSqlite "db.sqlite3" $ case cmd of
         pure Success
 
 
--- amiwinningResponse0     :: [(Game, Score)]
--- amiwinningResponse1     :: Score
-  -- TODO
-  Amiwinning gName_maybe -> pure Success
+  Amiwinning gName_maybe -> getSingleUserScores globalUser gName_maybe
 
--- aretheywinningResponse0 :: [(Game, Score)]
--- aretheywinningResponse1 :: Score
-  -- TODO
-  Aretheywinning uId gName_maybe -> pure Success
+  Aretheywinning discordUser gName_maybe -> getSingleUserScores discordUser gName_maybe
 
--- whoiswinningResponse0   :: [(Game, [(User, Score)])]
--- whoiswinningResponse1   :: [(User, Score)]
   -- TODO
   Whoiswinning gName_maybe -> pure Success
 
-  Rmself -> let uBS = idToByteString discordUser
+  Rmself -> let uBS = discordUserToBS globalUser
     in getBy (UniqueUserDiscordId uBS) >>= \case
       Nothing -> pure $ Error "User does not exist"
       Just (Entity userId _) -> delete userId >> pure Success
 
-  AywinsHelp -> pure . Response $
+  AywinsHelp -> pure . Message $
     if isAdmin then helpMessageAdmin
                else helpMessageUser
 
   -- ADMIN STUFF --
-  Theywon uId gName -> adminCheck $ do
-    user <- getOrDefaultUser (idToByteString uId)
+  Theywon discordUser gName -> adminCheck $ do
+    user <- getOrDefaultUser (discordUserToBS discordUser)
     if (userBanned . entityVal) user then
       pure $ Error userBannedError
     else do
@@ -123,17 +168,17 @@ cmdTest cmd = runSqlite "db.sqlite3" $ case cmd of
       Nothing                 -> pure $ Error "Game does not exists"
       Just (Entity gameId _)  -> delete gameId >> pure Success
 
-  Adduser uId -> adminCheck $ let uBS = idToByteString uId
+  Adduser discordUser -> adminCheck $ let uBS = discordUserToBS discordUser
     in getBy (UniqueUserDiscordId uBS) >>= \case
       Just _  -> pure $ Error "User already exists"
       Nothing -> insert (User uBS False) >> pure Success
 
-  Rmuser uId -> adminCheck $ let uBS = idToByteString uId
+  Rmuser discordUser -> adminCheck $ let uBS = discordUserToBS discordUser
     in getBy (UniqueUserDiscordId uBS) >>= \case
       Nothing                -> pure $ Error "User does not exist"
       Just (Entity userId _) -> delete userId >> pure Success
 
-  Banuser uId -> adminCheck $ let uBS = idToByteString uId
+  Banuser discordUser -> adminCheck $ let uBS = discordUserToBS discordUser
     in getBy (UniqueUserDiscordId uBS) >>= \case
       Nothing                   -> pure $ Error "User does not exist"
       Just (Entity userId user) -> if userBanned user then
@@ -141,7 +186,7 @@ cmdTest cmd = runSqlite "db.sqlite3" $ case cmd of
         else
           update userId [ UserBanned =. True ] >> pure Success
 
-  Unbanuser uId -> adminCheck $ let uBS = idToByteString uId
+  Unbanuser discordUser -> adminCheck $ let uBS = discordUserToBS discordUser
     in getBy (UniqueUserDiscordId uBS) >>= \case
       Nothing                   -> pure $ Error "User does not exist"
       Just (Entity userId user) -> if userBanned user then
