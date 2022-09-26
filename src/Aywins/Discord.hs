@@ -5,13 +5,14 @@
 {-# LANGUAGE TypeApplications #-}
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Fuse on/on" #-}
+{-# LANGUAGE TupleSections #-}
 
 module Aywins.Discord where
 
 import Aywins.DBActions
 import Aywins.Entities
 import Aywins.Types
-import Data.Bifunctor (Bifunctor(bimap))
+import Data.Bifunctor (Bifunctor(bimap, second))
 import Data.ByteString (ByteString)
 import Data.ByteString.Conversion (toByteString')
 import Data.List (partition, uncons)
@@ -19,7 +20,7 @@ import Data.Maybe (isJust, fromJust, fromMaybe)
 import Data.Text (Text)
 import Data.Traversable (forM)
 import Data.Word (Word64)
-import Database.Persist.Sqlite (runSqlite, getBy)
+import Database.Persist.Sqlite (runSqlite)
 import qualified Data.Text as T
 import qualified Discord.Types as D
 import qualified Database.Esqueleto.Experimental as E
@@ -61,7 +62,7 @@ helpMessageAdmin = ""
 
 getSingleUserScores :: D.User -> Maybe Text -> SqlAction Status
 getSingleUserScores discordUser = \case
-  Nothing    -> do
+  Nothing -> do
   -- SELECT       game, score
   --   FROM       Wins
   --   INNER_JOIN User ON Wins.user = User.id
@@ -136,8 +137,35 @@ cmdTest cmd = runSqlite "db.sqlite3" $ case cmd of
 
   Aretheywinning discordUser gName_maybe -> getSingleUserScores discordUser gName_maybe
 
-  -- TODO
-  Whoiswinning gName_maybe -> pure Success
+  Whoiswinning gName_maybe -> case gName_maybe of
+    Nothing -> do
+      games <- fmap (map unValue) . select $ do
+        game <- from $ table @Game
+        pure (game ^. #name)
+      results <- forM games $ \gameLookup ->
+        fmap (gameLookup,) . select $ do
+          (wins :& user :& game) <- from $ table @Wins
+            `innerJoin` table @User `on` (\(w :& u)      -> w ^. #user ==. u ^. #id)
+            `innerJoin` table @Game `on` (\(w :& _ :& g) -> w ^. #game ==. g ^. #id)
+          where_ (game ^. #name ==. val gameLookup)
+          pure (user ^. #discordId, wins ^. #score)
+      pure . Message
+           . fmtResponse
+           . FullLeaderboardResponse
+           . map (second (map (bimap unValue unValue)))
+           $ results
+    Just gName -> do
+      results <- select $ do
+        (wins :& user :& game) <- from $ table @Wins
+          `innerJoin` table @User `on` (\(w :& u)      -> w ^. #user ==. u ^. #id)
+          `innerJoin` table @Game `on` (\(w :& _ :& g) -> w ^. #game ==. g ^. #id)
+        where_ (game ^. #name ==. val gName)
+        pure (user ^. #discordId, wins ^. #score)
+      pure . Message
+           . fmtResponse
+           . GameLeaderboardResponse gName
+           . map (bimap unValue unValue)
+           $ results
 
   Rmself -> let uBS = discordUserToBS globalUser
     in getBy (UniqueUserDiscordId uBS) >>= \case
