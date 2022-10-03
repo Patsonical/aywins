@@ -11,6 +11,7 @@ import qualified Discord.Types as D
 import Database.Persist (Entity)
 import Aywins.Entities (User, Game)
 import Data.ByteString (ByteString)
+import Data.List.NonEmpty
 
 type SqlAction a = forall m. MonadIO m => ReaderT SqlBackend m a
 type ErrorMsg = Text
@@ -35,6 +36,7 @@ data Command =
   | Aretheywinning D.User (Maybe Text)
   | Whoiswinning (Maybe Text)
   | Rmself
+  | Lsgames
   | AywinsHelp
   | Theywon D.User Text
   | Addgame Text
@@ -43,13 +45,14 @@ data Command =
   | Rmuser D.User
   | Banuser D.User
   | Unbanuser D.User
-  | Mergegames [Text]
+  | Mergegames (NonEmpty Text)
   | Renamegame Text Text
 
 data Response = SingleUserResponse      D.User [(Text, Int)]
               | ScoreResponse           D.User Text Int
               | GameLeaderboardResponse Text [(ByteString, Int)]
               | FullLeaderboardResponse [(Text, [(ByteString, Int)])]
+              | GamesList               [Text]
 
 fmtResponse :: Response -> Text
 fmtResponse = pack . \case
@@ -57,3 +60,4 @@ fmtResponse = pack . \case
   ScoreResponse           user game score -> ""
   GameLeaderboardResponse game userScores -> ""
   FullLeaderboardResponse leaderboard     -> ""
+  GamesList               games           -> ""
