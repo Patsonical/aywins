@@ -6,18 +6,36 @@ module Aywins.Types where
 import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Trans.Reader (ReaderT)
 import Database.Persist.Sqlite (SqlBackend)
-import Data.Text (Text, pack)
+import Data.Text (Text)
 import qualified Discord.Types as D
-import Database.Persist (Entity)
-import Aywins.Entities (User, Game)
 import Data.ByteString (ByteString)
 import Data.List.NonEmpty
 
 type SqlAction a = forall m. MonadIO m => ReaderT SqlBackend m a
-type ErrorMsg = Text
 type SqliteConnStr = Text
 
-data Status = Success | NotImpl | Error ErrorMsg | Warning ErrorMsg | Message Text
+data Error = NotImplError
+           | AdminRoleMissingError
+           | MergeTargetsMissingError
+           | ParseFailureError
+           | GameExistsError
+           | GameMissingError
+           | UserNotAdminError
+           | UserExistsError
+           | UserMissingError
+           | UserBannedError
+           | OtherError Text
+              deriving (Show, Eq)
+
+data Response = SingleUserResponse      D.UserId [(Text, Int)]
+              | ScoreResponse           D.UserId Text Int
+              | GameLeaderboardResponse Text [(ByteString, Int)]
+              | FullLeaderboardResponse [(Text, [(ByteString, Int)])]
+              | GamesListResponse       [Text]
+                  deriving (Show, Eq)
+
+data Status = Success | Failure Error | Warning Text | Message Text | Reply Response
+  deriving (Show, Eq)
 
 data ScoreMod = Set Int | Inc Int | Dec Int
   deriving (Show, Eq)
@@ -31,33 +49,19 @@ scoreModToFn  = \case
 -- Raw input commands will be parsed into this
 data Command = 
     Iwon Text
-  | Setscore (Maybe D.User) ScoreMod Text
+  | Setscore (Maybe D.UserId) ScoreMod Text
   | Amiwinning (Maybe Text)
-  | Aretheywinning D.User (Maybe Text)
+  | Aretheywinning D.UserId (Maybe Text)
   | Whoiswinning (Maybe Text)
   | Rmself
   | Lsgames
   | AywinsHelp
-  | Theywon D.User Text
+  | Theywon D.UserId Text
   | Addgame Text
   | Rmgame Text
-  | Adduser D.User
-  | Rmuser D.User
-  | Banuser D.User
-  | Unbanuser D.User
+  | Adduser D.UserId
+  | Rmuser D.UserId
+  | Banuser D.UserId
+  | Unbanuser D.UserId
   | Mergegames (NonEmpty Text)
   | Renamegame Text Text
-
-data Response = SingleUserResponse      D.User [(Text, Int)]
-              | ScoreResponse           D.User Text Int
-              | GameLeaderboardResponse Text [(ByteString, Int)]
-              | FullLeaderboardResponse [(Text, [(ByteString, Int)])]
-              | GamesList               [Text]
-
-fmtResponse :: Response -> Text
-fmtResponse = pack . \case
-  SingleUserResponse      user gameScores -> ""
-  ScoreResponse           user game score -> ""
-  GameLeaderboardResponse game userScores -> ""
-  FullLeaderboardResponse leaderboard     -> ""
-  GamesList               games           -> ""

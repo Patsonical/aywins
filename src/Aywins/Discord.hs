@@ -8,6 +8,7 @@ import Aywins.ApplicationCommands
 import Aywins.Lib
 import Aywins.Commands
 import Aywins.CommandParser
+import Aywins.Responses
 import Control.Concurrent.MVar
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Reader (asks)
@@ -30,7 +31,7 @@ aywins = do
   runDiscord (config guildMVar) >>= TIO.putStrLn
 
 config :: MVar Guild -> Discord.RunDiscordOpts
-config guildMVar = 
+config guildMVar =
   def { discordToken   = token
       , discordOnEvent = readyHandler guildMVar <+> eventHandler guildMVar <+> printHandler
       , discordOnEnd   = endHandler
@@ -45,22 +46,25 @@ printHandler = liftIO . print
 
 eventHandler :: MVar Guild -> Event -> DiscordHandler ()
 eventHandler guildMVar = \case
-  InteractionCreate (InteractionApplicationCommand 
-    { applicationCommandData = ApplicationCommandDataChatInput 
+  InteractionCreate (InteractionApplicationCommand
+    { applicationCommandData = ApplicationCommandDataChatInput
         { applicationCommandDataName
-        , optionsData = Just optionsData
+        , optionsData = Just (OptionsDataValues optionsData)
         }
+    , interactionId
+    , interactionToken
     , interactionUser = MemberOrUser (Left guildMember)
     }) -> do
       let getAdminRole = find (\r -> roleName r == "AywinsAdmin")
-          reply = error ""
+          command_maybe = parseCommand applicationCommandDataName optionsData
       adminRole_maybe <- getAdminRole . guildRoles <$> liftIO (readMVar guildMVar)
-      status <- case adminRole_maybe of
-        Nothing -> pure $ Error "AywinsAdmin role does not exist"
-        Just adminRole -> liftIO $ maybe (pure $ Error "Command Parse Failure") 
-          (handleCommand guildMember (roleId adminRole))
-          (parseCommand applicationCommandDataName optionsData)
-      reply status
+      status <- case (adminRole_maybe, command_maybe) of
+        (Nothing       , _           ) -> pure $ Failure AdminRoleMissingError
+        (_             , Nothing     ) -> pure $ Failure ParseFailureError
+        (Just adminRole, Just command) -> handleCommand guildMember (roleId adminRole) command
+      response <- handleStatus status
+      r <- restCall $ R.CreateInteractionResponse interactionId interactionToken response
+      liftIO $ print r
   _ -> pure ()
 
 readyHandler :: MVar Guild -> Event -> DiscordHandler ()

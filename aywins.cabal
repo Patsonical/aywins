@@ -30,6 +30,7 @@ library
       Aywins.Discord
       Aywins.Entities
       Aywins.Lib
+      Aywins.Responses
       Aywins.Types
   other-modules:
       Paths_aywins

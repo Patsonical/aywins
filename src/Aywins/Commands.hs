@@ -29,12 +29,11 @@ import Database.Persist.Sqlite (runSqlite)
 import qualified Data.List.NonEmpty as N
 import qualified Data.Text as T
 import qualified Discord.Types as D
+import Discord
 
 -- Messages {{{
-notAdminError, userBannedError, helpMessageUser, helpMessageAdmin  :: ErrorMsg
+helpMessageUser, helpMessageAdmin  :: Text
 
-notAdminError = "ERROR: Action forbidden to non-admins"
-userBannedError = "ERROR: User is banned"
 helpMessageUser = ""
 helpMessageAdmin = ""
 -- }}}
@@ -46,7 +45,7 @@ idToByteString = toByteString' . D.unSnowflake . D.unId
 discordUserToBS :: D.User -> ByteString
 discordUserToBS = idToByteString . D.userId
 
-getSingleUserScores :: D.User -> Maybe Text -> SqlAction Status
+getSingleUserScores :: D.UserId -> Maybe Text -> SqlAction Status
 getSingleUserScores discordUser = \case
   Nothing -> do
   -- SELECT       game, score
@@ -58,10 +57,9 @@ getSingleUserScores discordUser = \case
       (wins :& user :& game) <- from $ table @Wins
         `innerJoin` table @User `on` (\(w :& u)      -> w ^. #user ==. u ^. #id)
         `innerJoin` table @Game `on` (\(w :& _ :& g) -> w ^. #game ==. g ^. #id)
-      where_ (user ^. #discordId ==. val (discordUserToBS discordUser))
+      where_ (user ^. #discordId ==. val (idToByteString discordUser))
       pure (game ^. #name, wins ^. #score)
-    pure . Message
-         . fmtResponse
+    pure . Reply
          . SingleUserResponse discordUser
          . map (bimap unValue unValue)
          $ results
@@ -77,159 +75,146 @@ getSingleUserScores discordUser = \case
       (wins :& user :& game) <- from $ table @Wins
         `innerJoin` table @User `on` (\(w :& u)      -> w ^. #user ==. u ^. #id)
         `innerJoin` table @Game `on` (\(w :& _ :& g) -> w ^. #game ==. g ^. #id)
-      where_ (user ^. #discordId ==. val (discordUserToBS discordUser))
+      where_ (user ^. #discordId ==. val (idToByteString discordUser))
       where_ (game ^. #name ==. val gName)
       pure (wins ^. #score)
-    pure . Message
-         . fmtResponse
+    pure . Reply
          . ScoreResponse discordUser gName
          . unValue
          . fromMaybe (Value 0)
          $ results
 -- }}}
 
-handleCommand :: D.GuildMember -> D.RoleId -> Command -> IO Status
+handleCommand :: D.GuildMember -> D.RoleId -> Command -> DiscordHandler Status
 handleCommand thisMember adminRoleId cmd = let
-
-  thisUser = (fromJust . D.memberUser) thisMember
-
-  isAdmin = adminRoleId `elem` D.memberRoles thisMember
-
-  adminCheck :: SqlAction Status -> SqlAction Status
-  adminCheck authAction = if isAdmin then authAction else pure $ Error notAdminError
-
+  thisUser              = (fromJust . D.memberUser) thisMember
+  isAdmin               = adminRoleId `elem` D.memberRoles thisMember
+  adminCheck authAction = if isAdmin then authAction else pure $ Failure UserNotAdminError
   in runSqlite "db.sqlite3" $ case cmd of
-
-  Iwon gName -> do
-    user <- getOrDefaultUser (discordUserToBS thisUser)
-    if (userBanned . entityVal) user then
-      pure $ Error userBannedError
-    else do
-      game <- getOrDefaultGame gName
-      _    <- addWin user game
-      pure Success
-
-  Setscore discordUser_maybe scoreMod gName -> do
-    targeting <- case discordUser_maybe of
-      Just target -> if isAdmin then
-          Right <$> getOrDefaultUser (discordUserToBS target)
-        else
-          pure $ Left notAdminError
-      Nothing -> do
-        user <- getOrDefaultUser (discordUserToBS thisUser)
-        if (userBanned . entityVal) user && not isAdmin then
-          pure $ Left userBannedError
-        else
-          pure $ Right user
-    case targeting of
-      Left err   -> pure $ Error err
-      Right user -> do
+    Iwon gName -> do
+      user <- getOrDefaultUser (discordUserToBS thisUser)
+      if (userBanned . entityVal) user then
+        pure $ Failure UserBannedError
+      else do
         game <- getOrDefaultGame gName
-        _    <- setScore scoreMod user game
+        _    <- addWin user game
         pure Success
 
-  Amiwinning gName_maybe -> getSingleUserScores thisUser gName_maybe
+    Setscore discordUser_maybe scoreMod gName -> do
+      targeting <- case discordUser_maybe of
+        Just target -> if isAdmin then
+            Right <$> getOrDefaultUser (idToByteString target)
+          else
+            pure $ Left UserNotAdminError
+        Nothing -> do
+          user <- getOrDefaultUser (discordUserToBS thisUser)
+          if (userBanned . entityVal) user && not isAdmin then
+            pure $ Left UserBannedError
+          else
+            pure $ Right user
+      case targeting of
+        Left err   -> pure $ Failure err
+        Right user -> do
+          game <- getOrDefaultGame gName
+          _    <- setScore scoreMod user game
+          pure Success
 
-  Aretheywinning discordUser gName_maybe -> getSingleUserScores discordUser gName_maybe
+    Amiwinning gName_maybe -> getSingleUserScores (D.userId thisUser) gName_maybe
 
-  Whoiswinning gName_maybe -> case gName_maybe of
-    Nothing -> do
-      games <- fmap (map unValue) . select $ do
-        game <- from $ table @Game
-        pure (game ^. #name)
-      results <- forM games $ \gameLookup ->
-        fmap (gameLookup,) . select $ do
+    Aretheywinning discordUser gName_maybe -> getSingleUserScores discordUser gName_maybe
+
+    Whoiswinning gName_maybe -> case gName_maybe of
+      Nothing -> do
+        games <- fmap (map unValue) . select $ do
+          game <- from $ table @Game
+          pure (game ^. #name)
+        results <- forM games $ \gameLookup ->
+          fmap (gameLookup,) . select $ do
+            (wins :& user :& game) <- from $ table @Wins
+              `innerJoin` table @User `on` (\(w :& u)      -> w ^. #user ==. u ^. #id)
+              `innerJoin` table @Game `on` (\(w :& _ :& g) -> w ^. #game ==. g ^. #id)
+            where_ (game ^. #name ==. val gameLookup)
+            pure (user ^. #discordId, wins ^. #score)
+        pure . Reply
+             . FullLeaderboardResponse
+             . map (second (map (bimap unValue unValue)))
+             $ results
+      Just gName -> do
+        results <- select $ do
           (wins :& user :& game) <- from $ table @Wins
             `innerJoin` table @User `on` (\(w :& u)      -> w ^. #user ==. u ^. #id)
             `innerJoin` table @Game `on` (\(w :& _ :& g) -> w ^. #game ==. g ^. #id)
-          where_ (game ^. #name ==. val gameLookup)
+          where_ (game ^. #name ==. val gName)
           pure (user ^. #discordId, wins ^. #score)
-      pure . Message
-           . fmtResponse
-           . FullLeaderboardResponse
-           . map (second (map (bimap unValue unValue)))
-           $ results
-    Just gName -> do
-      results <- select $ do
-        (wins :& user :& game) <- from $ table @Wins
-          `innerJoin` table @User `on` (\(w :& u)      -> w ^. #user ==. u ^. #id)
-          `innerJoin` table @Game `on` (\(w :& _ :& g) -> w ^. #game ==. g ^. #id)
-        where_ (game ^. #name ==. val gName)
-        pure (user ^. #discordId, wins ^. #score)
-      pure . Message
-           . fmtResponse
-           . GameLeaderboardResponse gName
-           . map (bimap unValue unValue)
-           $ results
+        pure . Reply
+             . GameLeaderboardResponse gName
+             . map (bimap unValue unValue)
+             $ results
 
-  Rmself -> let uBS = discordUserToBS thisUser
-    in getBy (UniqueUserDiscordId uBS) >>= \case
-      Nothing -> pure $ Error "User does not exist"
-      Just (Entity userId _) -> delete userId >> pure Success
+    Rmself -> let uBS = discordUserToBS thisUser
+      in getBy (UniqueUserDiscordId uBS) >>= \case
+        Nothing -> pure $ Failure UserMissingError
+        Just (Entity userId _) -> delete userId >> pure Success
 
-  Lsgames -> do
-    games <- fmap (map unValue) . select $ do
-      game <- from $ table @Game
-      pure (game ^. #name)
-    pure . Message
-         . fmtResponse
-         . GamesList
-         $ games
+    Lsgames -> do
+      games <- fmap (map unValue) . select $ do
+        game <- from $ table @Game
+        pure (game ^. #name)
+      pure . Reply
+           . GamesListResponse
+           $ games
 
-  AywinsHelp -> pure . Message $
-    if isAdmin then helpMessageAdmin
-               else helpMessageUser
+    AywinsHelp -> pure . Message $
+      if isAdmin then helpMessageAdmin
+                 else helpMessageUser
 
-  -- ADMIN STUFF --
-  Theywon discordUser gName -> adminCheck $ do
-    user <- getOrDefaultUser (discordUserToBS discordUser)
-    if (userBanned . entityVal) user then
-      pure $ Error userBannedError
-    else do
-      game <- getOrDefaultGame gName
-      _    <- addWin user game
-      pure Success
+    -- ADMIN STUFF --
+    Theywon discordUser gName -> adminCheck $ do
+      user <- getOrDefaultUser (idToByteString discordUser)
+      if (userBanned . entityVal) user then
+        pure $ Failure UserBannedError
+      else do
+        game <- getOrDefaultGame gName
+        _    <- addWin user game
+        pure Success
 
-  Addgame gName -> adminCheck $
-    getBy (UniqueGameName gName) >>= \case
-      Just _  -> pure $ Error "Game already exists"
-      Nothing -> insert (Game gName) >> pure Success
+    Addgame gName -> adminCheck $
+      getBy (UniqueGameName gName) >>= \case
+        Just _  -> pure $ Failure GameExistsError
+        Nothing -> insert (Game gName) >> pure Success
 
-  Rmgame gName -> adminCheck $
-    getBy (UniqueGameName gName) >>= \case
-      Nothing                 -> pure $ Error "Game does not exists"
-      Just (Entity gameId _)  -> delete gameId >> pure Success
+    Rmgame gName -> adminCheck $
+      getBy (UniqueGameName gName) >>= \case
+        Nothing                 -> pure $ Failure GameMissingError
+        Just (Entity gameId _)  -> delete gameId >> pure Success
 
-  Adduser discordUser -> adminCheck $ let uBS = discordUserToBS discordUser
-    in getBy (UniqueUserDiscordId uBS) >>= \case
-      Just _  -> pure $ Error "User already exists"
-      Nothing -> insert (User uBS False) >> pure Success
+    Adduser discordUser -> adminCheck $ let uBS = idToByteString discordUser
+      in getBy (UniqueUserDiscordId uBS) >>= \case
+        Just _  -> pure $ Failure UserExistsError
+        Nothing -> insert (User uBS False) >> pure Success
 
-  Rmuser discordUser -> adminCheck $ let uBS = discordUserToBS discordUser
-    in getBy (UniqueUserDiscordId uBS) >>= \case
-      Nothing                -> pure $ Error "User does not exist"
-      Just (Entity userId _) -> delete userId >> pure Success
+    Rmuser discordUser -> adminCheck $ let uBS = idToByteString discordUser
+      in getBy (UniqueUserDiscordId uBS) >>= \case
+        Nothing                -> pure $ Failure UserMissingError
+        Just (Entity userId _) -> delete userId >> pure Success
 
-  Banuser discordUser -> adminCheck $ let uBS = discordUserToBS discordUser
-    in getBy (UniqueUserDiscordId uBS) >>= \case
-      Nothing                   -> pure $ Error "User does not exist"
-      Just (Entity userId user) -> if userBanned user then
-          pure $ Error "User already banned"
-        else
-          update userId [ UserBanned =. True ] >> pure Success
+    Banuser discordUser -> adminCheck $ let uBS = idToByteString discordUser
+      in getBy (UniqueUserDiscordId uBS) >>= \case
+        Nothing                   -> pure $ Failure UserMissingError
+        Just (Entity userId user) -> if userBanned user then
+            pure $ Warning "Target user is already banned"
+          else
+            update userId [ UserBanned =. True ] >> pure Success
 
-  Unbanuser discordUser -> adminCheck $ let uBS = discordUserToBS discordUser
-    in getBy (UniqueUserDiscordId uBS) >>= \case
-      Nothing                   -> pure $ Error "User does not exist"
-      Just (Entity userId user) -> if userBanned user then
-          update userId [ UserBanned =. False ] >> pure Success
-        else
-          pure $ Error "User not banned"
+    Unbanuser discordUser -> adminCheck $ let uBS = idToByteString discordUser
+      in getBy (UniqueUserDiscordId uBS) >>= \case
+        Nothing                   -> pure $ Failure UserMissingError
+        Just (Entity userId user) -> if userBanned user then
+            update userId [ UserBanned =. False ] >> pure Success
+          else
+            pure $ Warning "Target user is not banned"
 
-  Mergegames gNames -> adminCheck $
-    if N.length gNames < 2 then
-      pure $ Error "Insufficient arguments"
-    else do
+    Mergegames gNames -> adminCheck $ do
       gamesQueried  <- forM gNames $ getBy . UniqueGameName
       let (targetName   :| _) = gNames
           (target_maybe :| _) = gamesQueried
@@ -242,7 +227,7 @@ handleCommand thisMember adminRoleId cmd = let
         Nothing -> insertEntity (Game targetName) <&> (, fst gamesFound, True)
       if null toMerge then do
         when new $ delete targetId
-        pure $ Error "Merge targets not found"
+        pure $ Failure MergeTargetsMissingError
       else do
         forM_ toMerge $ \(Entity gameId _) -> do
           gameWinsList <- select $ do
@@ -255,8 +240,8 @@ handleCommand thisMember adminRoleId cmd = let
                else Warning $ T.append "Some games were not found: "
                                        (T.unwords (snd gamesFound))
 
-  Renamegame gOldName gNewName -> adminCheck $
-    getBy (UniqueGameName gOldName) >>= \case
-      Nothing                -> pure $ Error "Game does not exist"
-      Just (Entity gameId _) ->
-        update gameId [ GameName =. gNewName ] >> pure Success
+    Renamegame gOldName gNewName -> adminCheck $
+      getBy (UniqueGameName gOldName) >>= \case
+        Nothing                -> pure $ Failure GameMissingError
+        Just (Entity gameId _) ->
+          update gameId [ GameName =. gNewName ] >> pure Success

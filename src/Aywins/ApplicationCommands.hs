@@ -89,8 +89,8 @@ applicationCommands = let
     , mkOptStr False "mergegame4" "Name of game to merge 4"
     ]
   renamegameOpts = Just $ OptionsValues [
-      mkOptStr True "games" "Original game name"
-    , mkOptStr True "games" "New game name"
+      mkOptStr True "oldname" "Original game name"
+    , mkOptStr True "newname" "New game name"
     ]
   in [
     mkAppCommand "iwon"           "Increment your score in <game>"                              iwonOpts
