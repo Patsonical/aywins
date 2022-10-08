@@ -23,6 +23,7 @@ source-repository head
 
 library
   exposed-modules:
+      Aywins.ApplicationCommands
       Aywins.CommandParser
       Aywins.Commands
       Aywins.DBActions

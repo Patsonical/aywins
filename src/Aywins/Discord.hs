@@ -4,68 +4,79 @@
 
 module Aywins.Discord where
 
+import Aywins.ApplicationCommands
 import Aywins.Lib
-import Control.Concurrent.MVar (readMVar)
+import Aywins.Commands
+import Aywins.CommandParser
+import Control.Concurrent.MVar
 import Control.Monad.IO.Class (MonadIO(..))
 import Control.Monad.Trans.Reader (asks)
 import Data.Function ((&))
 import Data.Text (Text)
+import Data.List (find)
 import Discord
 import Discord.Handle (DiscordHandle(..))
-import Discord.Interactions
 import Discord.Internal.Gateway (CacheHandle(..))
 import Discord.Types
 import qualified Data.Text.IO as TIO
 import qualified Discord.Requests as R
+import Control.Monad (forM_, when)
+import Discord.Interactions
+import Aywins.Types
 
 aywins :: IO ()
 aywins = do
-  runDiscord config >>= TIO.putStrLn
+  guildMVar <- newEmptyMVar
+  runDiscord (config guildMVar) >>= TIO.putStrLn
 
-config :: Discord.RunDiscordOpts
-config = def { discordToken   = token
-             , discordOnEvent = readyHandler <+> eventHandler
-             , discordOnEnd   = endHandler
-             , discordOnLog   = logHandler
-             }
+config :: MVar Guild -> Discord.RunDiscordOpts
+config guildMVar = 
+  def { discordToken   = token
+      , discordOnEvent = readyHandler guildMVar <+> eventHandler guildMVar <+> printHandler
+      , discordOnEnd   = endHandler
+      , discordOnLog   = logHandler
+      }
 
 token :: Text
 token = "MTAyNjEzMTM5MTMwMzQwMTQ4Mw.GBaOWL.iHQ0ha3GnBrGwfuuQXAXG1ufRrPtOrYI_dph2g"
 
-eventHandler :: Event -> DiscordHandler ()
-eventHandler ev = pure ()
+printHandler :: Event -> DiscordHandler ()
+printHandler = liftIO . print
 
-readyHandler :: Event -> DiscordHandler ()
-readyHandler = \case
-  GuildCreate (Guild {guildId}) -> do
-    appId <- do
-      cacheMVar <- asks $ discordHandleCache .> cacheHandleCache
-      cache     <- liftIO $ readMVar cacheMVar >>= \case
-        Left (c, _) -> pure c
-        Right c     -> pure c
-      pure (cacheApplication cache & partialApplicationID)
-    response <- restCall $ R.CreateGuildApplicationCommand appId guildId
-      CreateApplicationCommandChatInput {
-          createName = "testcommand" -- needs to be one word
-        , createLocalizedName = Nothing
-        , createDescription = "Test Description"
-        , createLocalizedDescription = Nothing
-        , createOptions = Just . OptionsValues $ [
-            OptionValueString {
-              optionValueName = "testoption" -- needs to be one word
-            , optionValueLocalizedName = Nothing
-            , optionValueDescription = "This is a test option"
-            , optionValueLocalizedDescription = Nothing
-            , optionValueRequired = True
-            , optionValueStringChoices = Left False
-            , optionValueStringMinLen = Nothing
-            , optionValueStringMaxLen = Nothing
-            }
-          ]
-        , createDefaultMemberPermissions = Nothing
-        , createDMPermission = Just False
+eventHandler :: MVar Guild -> Event -> DiscordHandler ()
+eventHandler guildMVar = \case
+  InteractionCreate (InteractionApplicationCommand 
+    { applicationCommandData = ApplicationCommandDataChatInput 
+        { applicationCommandDataName
+        , optionsData = Just optionsData
         }
-    liftIO $ print response
+    , interactionUser = MemberOrUser (Left guildMember)
+    }) -> do
+      let getAdminRole = find (\r -> roleName r == "AywinsAdmin")
+          reply = error ""
+      adminRole_maybe <- getAdminRole . guildRoles <$> liftIO (readMVar guildMVar)
+      status <- case adminRole_maybe of
+        Nothing -> pure $ Error "AywinsAdmin role does not exist"
+        Just adminRole -> liftIO $ maybe (pure $ Error "Command Parse Failure") 
+          (handleCommand guildMember (roleId adminRole))
+          (parseCommand applicationCommandDataName optionsData)
+      reply status
+  _ -> pure ()
+
+readyHandler :: MVar Guild -> Event -> DiscordHandler ()
+readyHandler guildMVar = \case
+  GuildCreate guild@(Guild {guildId}) -> do
+    success <- liftIO $ tryPutMVar guildMVar guild
+    when success $ do
+      appId <- do
+        cacheMVar <- asks $ discordHandleCache .> cacheHandleCache
+        cache     <- liftIO $ readMVar cacheMVar >>= \case
+          Left (c, _) -> pure c
+          Right c     -> pure c
+        pure (cache & cacheApplication & partialApplicationID)
+      forM_ applicationCommands $ \cmd -> do
+        r <- restCall $ R.CreateGuildApplicationCommand appId guildId cmd
+        liftIO $ print r
   _ -> pure ()
 
 endHandler :: IO ()
@@ -73,53 +84,3 @@ endHandler = pure ()
 
 logHandler :: Text -> IO ()
 logHandler = TIO.putStrLn
-
--- Default command and option values {{{
-defAppCommand :: CreateApplicationCommand
-defAppCommand = CreateApplicationCommandChatInput {
-    createName = "default" -- needs to be one word
-  , createLocalizedName = Nothing
-  , createDescription = ""
-  , createLocalizedDescription = Nothing
-  , createOptions = Just $ OptionsValues []
-  , createDefaultMemberPermissions = Nothing
-  , createDMPermission = Just False
-  }
-
-defOptionValueInteger, defOptionValueString, defOptionValueUser :: OptionValue
-defOptionValueInteger = OptionValueInteger {
-    optionValueName = "default" -- needs to be one word
-  , optionValueLocalizedName = Nothing
-  , optionValueDescription = ""
-  , optionValueLocalizedDescription = Nothing
-  , optionValueRequired = True
-  , optionValueIntegerChoices = Left False
-  , optionValueIntegerMinVal = Nothing
-  , optionValueIntegerMaxVal = Nothing
-  }
-
-defOptionValueString = OptionValueString {
-    optionValueName = "default" -- needs to be one word
-  , optionValueLocalizedName = Nothing
-  , optionValueDescription = ""
-  , optionValueLocalizedDescription = Nothing
-  , optionValueRequired = True
-  , optionValueStringChoices = Left False
-  , optionValueStringMinLen = Nothing
-  , optionValueStringMaxLen = Nothing
-  }
-
-defOptionValueUser = OptionValueUser {
-    optionValueName = "default" -- needs to be one word
-  , optionValueLocalizedName = Nothing
-  , optionValueDescription = ""
-  , optionValueLocalizedDescription = Nothing
-  , optionValueRequired = True
-  }
--- }}}
-
-applicationCommands :: [CreateApplicationCommand]
-applicationCommands = [
-    defAppCommand
-  , defAppCommand
-  ]

@@ -8,7 +8,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Aywins.Commands (handleComand) where
+module Aywins.Commands (handleCommand) where
 
 import Aywins.DBActions
 import Aywins.Entities
@@ -88,8 +88,12 @@ getSingleUserScores discordUser = \case
          $ results
 -- }}}
 
-handleComand :: D.User -> Bool -> Command -> IO Status
-handleComand thisUser isAdmin cmd = let
+handleCommand :: D.GuildMember -> D.RoleId -> Command -> IO Status
+handleCommand thisMember adminRoleId cmd = let
+
+  thisUser = (fromJust . D.memberUser) thisMember
+
+  isAdmin = adminRoleId `elem` D.memberRoles thisMember
 
   adminCheck :: SqlAction Status -> SqlAction Status
   adminCheck authAction = if isAdmin then authAction else pure $ Error notAdminError
