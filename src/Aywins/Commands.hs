@@ -32,6 +32,7 @@ import qualified Data.List.NonEmpty as N
 import qualified Data.Text as T
 import qualified Discord.Types as D
 import Control.Monad.IO.Class (MonadIO(..))
+import Discord.Types (GuildMember(..))
 
 -- Messages {{{
 helpMessageUser, helpMessageAdmin  :: Text
@@ -172,7 +173,9 @@ handleCommand thisMember adminRoleId cmd = let
     AywinsHelp -> pure (Failure NotImplError)
 
     Shoutatpatryk complaint -> do
-      liftIO $ logToFile "log/aywins_problems.log" complaint
+      let signature = fromMaybe "NO NAME" (memberNick thisMember)
+          signedComplaint = T.concat [ signature, ": ", complaint ]
+      liftIO $ logToFile "log/aywins_problems.log" signedComplaint
       pure Success
 
     -- ADMIN STUFF --
