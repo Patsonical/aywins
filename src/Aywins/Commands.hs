@@ -12,6 +12,7 @@ module Aywins.Commands (handleCommand) where
 
 import Aywins.DBActions
 import Aywins.Entities
+import Aywins.Lib
 import Aywins.Types
 import Control.Monad (when, forM, forM_)
 import Data.Bifunctor (Bifunctor(bimap, second))
@@ -26,10 +27,11 @@ import Database.Esqueleto.Experimental hiding (
        )
 import Database.Persist (Entity (..), insert, update, delete, (=.))
 import Database.Persist.Sqlite (runSqlite)
+import Discord
 import qualified Data.List.NonEmpty as N
 import qualified Data.Text as T
 import qualified Discord.Types as D
-import Discord
+import Control.Monad.IO.Class (MonadIO(..))
 
 -- Messages {{{
 helpMessageUser, helpMessageAdmin  :: Text
@@ -164,9 +166,14 @@ handleCommand thisMember adminRoleId cmd = let
            . GamesListResponse
            $ games
 
-    AywinsHelp -> pure . Message $
-      if isAdmin then helpMessageAdmin
-                 else helpMessageUser
+    --AywinsHelp -> pure . Message $
+    --  if isAdmin then helpMessageAdmin
+    --             else helpMessageUser
+    AywinsHelp -> pure (Failure NotImplError)
+
+    Shoutatpatryk complaint -> do
+      liftIO $ logToFile "log/aywins_problems.log" complaint
+      pure Success
 
     -- ADMIN STUFF --
     Theywon discordUser gName -> adminCheck $ do

@@ -59,6 +59,9 @@ applicationCommands = let
   rmselfOpts = Nothing
   lsgamesOpts = Nothing
   aywinshelpOpts = Nothing
+  shoutatpatrykOpts = Just $ OptionsValues [
+      mkOptStr True "complaint" "What are you shouting at me for?"
+    ]
   theywonOpts = Just $ OptionsValues [
       mkOptUser True "target" "User to add a win for"
     , mkOptStr True "game" "Name of the game to add a win for"
@@ -100,7 +103,8 @@ applicationCommands = let
   , mkAppCommand "whoiswinning"   "Get global leaderboards for all games or a specific <game>"  whoiswinningOpts
   , mkAppCommand "rmself"         "Remove self from Aywins leaderboards"                        rmselfOpts
   , mkAppCommand "lsgames"        "List games in Aywins leaderboards"                           lsgamesOpts
-  , mkAppCommand "aywinshelp"     "Display Aywins help message`"                                aywinshelpOpts
+  , mkAppCommand "aywinshelp"     "Display Aywins help message"                                 aywinshelpOpts
+  , mkAppCommand "shoutatpatryk"  "Report a problem to the developer"                           shoutatpatrykOpts
   , mkAppCommand "theywon"        "Increment <user>'s score in <game>"                          theywonOpts
   , mkAppCommand "addgame"        "Add <game> to Aywins"                                        addgameOpts
   , mkAppCommand "rmgame"         "Remove <game> from Aywins"                                   rmgameOpts

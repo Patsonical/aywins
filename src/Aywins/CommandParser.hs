@@ -59,6 +59,7 @@ parseCommand cmd options = flip runReaderT options $ case cmd of
   "rmself"         -> pure Rmself
   "lsgames"        -> pure Lsgames
   "aywinshelp"     -> pure AywinsHelp
+  "shoutatpatryk"  -> Shoutatpatryk <$> getOptStr "complaint"
   "theywon"        -> Theywon <$> getOptUser "target" <*> getOptStr "game"
   "addgame"        -> Addgame <$> getOptStr "game"
   "rmgame"         -> Rmgame <$> getOptStr "game"

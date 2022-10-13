@@ -56,6 +56,7 @@ data Command =
   | Rmself
   | Lsgames
   | AywinsHelp
+  | Shoutatpatryk Text
   | Theywon D.UserId Text
   | Addgame Text
   | Rmgame Text

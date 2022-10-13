@@ -1,18 +1,29 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 
 module Aywins.Responses (handleStatus, fmtResponse) where
 
 import Aywins.Types
 import Discord.Interactions (InteractionResponse, interactionResponseBasic)
-import Data.Text (Text, append, pack)
-import Discord (DiscordHandler)
+import Data.Text (Text)
+import qualified Data.Text as T
+import Discord
+import qualified Discord.Types as D
+import Aywins.Lib
+import Discord.Internal.Rest.User (UserRequest(..))
+import qualified Data.List.NonEmpty as NE
+import Data.List.NonEmpty (NonEmpty(..))
+import Data.Maybe (catMaybes, fromJust)
+import Discord.Internal.Rest (User(userMember), GuildMember (..))
+import Data.ByteString.Conversion (fromByteString)
+import Control.Monad (forM)
 
 handleStatus :: Status -> DiscordHandler InteractionResponse
 handleStatus = fmap interactionResponseBasic . \case
   Success     -> pure "Success :thumbsup:"
-  Failure err -> pure ("***ERROR:*** " `append` translateError err)
-  Warning msg -> pure ("**Warning:** " `append` msg)
+  Failure err -> pure ("***ERROR:*** " `T.append` translateError err)
+  Warning msg -> pure ("**Warning:** " `T.append` msg)
   Message msg -> pure msg
   Reply   rp  -> fmtResponse rp
 
@@ -31,13 +42,53 @@ translateError = \case
   OtherError t             -> t
 
 tShow :: Show a => a -> Text
-tShow = pack . show
+tShow = T.pack . show
+
+getUser :: D.UserId -> DiscordHandler (Maybe D.User)
+getUser uid = rightToMaybe <$> restCall (GetUser uid)
+
+userToName :: D.UserId -> Maybe D.User -> Text
+userToName uid user_maybe = NE.last (defaultName :| names)
+  where defaultName = T.pack . show . D.unSnowflake . D.unId $ uid
+        names = catMaybes [ username
+                          , usernameDiscrim
+                          , guildmemberNick
+                          ]
+        username        = D.userName <$> user_maybe
+        usernameDiscrim = T.append <$> username <*> (user_maybe >>= D.userDiscrim)
+        guildmemberNick = user_maybe >>= userMember >>= memberNick
+
+userIdToName :: D.UserId -> DiscordHandler Text
+userIdToName uid = userToName uid <$> getUser uid
+
+bold, italic, boldItalic, code, codeBlock :: Text -> Text
+bold t       = T.concat [ "**"   , T.strip t, "**"    ]
+italic t     = T.concat [ "*"    , T.strip t, "*"     ]
+boldItalic t = T.concat [ "***"  , T.strip t, "***"   ]
+code t       = T.concat [ "`"    , t        , "`"     ]
+codeBlock t  = T.concat [ "```\n", t        , "\n```" ]
 
 -- TODO
 fmtResponse :: Response -> DiscordHandler Text
-fmtResponse = \case
-  SingleUserResponse      user gameScores -> pure $ tShow gameScores
-  ScoreResponse           user game score -> pure $ tShow score
-  GameLeaderboardResponse game userScores -> pure $ tShow userScores
-  FullLeaderboardResponse leaderboard     -> pure $ tShow leaderboard
-  GamesListResponse       games           -> pure $ tShow games
+fmtResponse = let
+  gameLeaderboard game userScores = do
+    let header = T.concat [ "Scores for ", bold game, ":" ]
+    body      <- forM userScores $ \(userBS, score) -> do
+      let userId = D.DiscordId . D.Snowflake . fromJust . fromByteString $ userBS
+      username <- userIdToName userId
+      pure $ T.concat [ "- ", username, ": ", code (tShow score) ]
+    pure $ header `T.append` T.unlines body
+  in \case
+  SingleUserResponse      userId gameScores -> do
+    username <- userIdToName userId
+    let header = T.concat [ bold username, "'s scores:\n" ]
+        body   = T.unlines . flip map gameScores $ \(game, score) ->
+                   T.concat [ "- ", game, ": ", code (tShow score) ]
+    pure $ header `T.append` body
+  ScoreResponse           userId game score -> do
+    username <- userIdToName userId
+    pure $ T.concat [ bold username, "'s score in ", game, ": ", code (tShow score) ]
+  GameLeaderboardResponse game userScores -> gameLeaderboard game userScores
+  FullLeaderboardResponse leaderboard     -> fmap T.unlines . forM leaderboard 
+                                                            $ uncurry gameLeaderboard
+  GamesListResponse       games           -> pure . T.unlines . map ("- " `T.append`) $ games
