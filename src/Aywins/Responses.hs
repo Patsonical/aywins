@@ -77,18 +77,23 @@ fmtResponse = let
       let userId = D.DiscordId . D.Snowflake . fromJust . fromByteString $ userBS
       username <- userIdToName userId
       pure $ T.concat [ "- ", username, ": ", code (tShow score) ]
-    pure $ header `T.append` T.unlines body
+    pure $ T.concat [ header, "\n", T.unlines body ]
   in \case
   SingleUserResponse      userId gameScores -> do
     username <- userIdToName userId
-    let header = T.concat [ bold username, "'s scores:\n" ]
+    let header = T.concat [ bold username, "'s scores:" ]
         body   = T.unlines . flip map gameScores $ \(game, score) ->
                    T.concat [ "- ", game, ": ", code (tShow score) ]
-    pure $ header `T.append` body
+    pure $ T.concat [ header, "\n", body ]
   ScoreResponse           userId game score -> do
     username <- userIdToName userId
     pure $ T.concat [ bold username, "'s score in ", game, ": ", code (tShow score) ]
   GameLeaderboardResponse game userScores -> gameLeaderboard game userScores
   FullLeaderboardResponse leaderboard     -> fmap T.unlines . forM leaderboard 
                                                             $ uncurry gameLeaderboard
-  GamesListResponse       games           -> pure . T.unlines . map ("- " `T.append`) $ games
+  GamesListResponse       games           -> 
+    let header = bold "Games in the Aywins system:"
+        body   = T.unlines $ case map ("- " `T.append`) games of
+          [] -> ["-- Nothing here :cricket: --"]
+          gs -> gs
+    in pure $ T.concat [ header, "\n", body ]

@@ -246,6 +246,7 @@ handleCommand thisMember adminRoleId cmd = let
             pure wins
           forM_ gameWinsList $ \(Entity winsId _) ->
             update winsId [ WinsGame =. targetId ]
+          delete gameId
         pure $ if null (snd gamesFound) then Success
                else Warning $ T.append "Some games were not found: "
                                        (T.unwords (snd gamesFound))
