@@ -1,7 +1,8 @@
 .direnv/
 .stack-work/
-db.sqlite3
+log/
 resources/
 result/
-log/
+.env
+db.sqlite3
 *~

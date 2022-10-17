@@ -25,22 +25,19 @@ import Discord.Types
 import qualified Data.Text.IO as TIO
 import qualified Discord.Requests as R
 
-aywins :: IO ()
-aywins = do
+aywins :: Text -> IO ()
+aywins token = do
   guildMVar <- newEmptyMVar
-  runDiscord (config guildMVar) >>= TIO.putStrLn
+  runDiscord (config token guildMVar) >>= TIO.putStrLn
 
-config :: MVar Guild -> Discord.RunDiscordOpts
-config guildMVar =
+config :: Text -> MVar Guild -> Discord.RunDiscordOpts
+config token guildMVar =
   def { discordToken   = token
       , discordOnEvent = eventHandler guildMVar
       , discordOnEnd   = endHandler
       , discordOnLog   = logHandler
       }
 
-token :: Text
-token = "MTAyNjEzMTM5MTMwMzQwMTQ4Mw.GBaOWL.iHQ0ha3GnBrGwfuuQXAXG1ufRrPtOrYI_dph2g"
-  
 eventHandler :: MVar Guild -> Event -> DiscordHandler ()
 eventHandler guildMVar = \case
   GuildCreate guild@(Guild {guildId}) -> do

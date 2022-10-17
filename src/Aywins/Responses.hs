@@ -89,8 +89,9 @@ fmtResponse = let
     username <- userIdToName userId
     pure $ T.concat [ bold username, "'s score in ", game, ": ", code (tShow score) ]
   GameLeaderboardResponse game userScores -> gameLeaderboard game userScores
-  FullLeaderboardResponse leaderboard     -> fmap T.unlines . forM leaderboard 
-                                                            $ uncurry gameLeaderboard
+  FullLeaderboardResponse leaderboard     -> case leaderboard of
+    [] -> pure "-- No games have been added yet :cricket: --"
+    lb -> fmap T.unlines . forM lb $ uncurry gameLeaderboard
   GamesListResponse       games           -> 
     let header = bold "Games in the Aywins system:"
         body   = T.unlines $ case map ("- " `T.append`) games of

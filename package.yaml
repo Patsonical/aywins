@@ -20,15 +20,16 @@ description:         Are ya winning son? - A Discord bot for tracking game score
 
 dependencies:
 - base >= 4.7 && < 5
+- bytestring
+- bytestring-conversion
 - discord-haskell
+- dotenv
 - esqueleto
 - persistent
 - persistent-sqlite
 - persistent-template
 - text
 - time
-- bytestring
-- bytestring-conversion
 - transformers
 
 ghc-options:
