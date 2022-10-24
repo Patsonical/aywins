@@ -39,6 +39,7 @@
         pkgs-deps = with pkgs; [
           sqlite
           sqlitebrowser
+          stdenv.cc.cc.lib
           zlib
         ];
 

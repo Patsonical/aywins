@@ -15,6 +15,7 @@ import Aywins.Entities
 import Aywins.Lib
 import Aywins.Types
 import Control.Monad (when, forM, forM_)
+import Control.Monad.IO.Class (MonadIO(..))
 import Data.Bifunctor (Bifunctor(bimap, second))
 import Data.ByteString (ByteString)
 import Data.ByteString.Conversion (toByteString')
@@ -28,11 +29,10 @@ import Database.Esqueleto.Experimental hiding (
 import Database.Persist (Entity (..), insert, update, delete, (=.))
 import Database.Persist.Sqlite (runSqlite)
 import Discord
-import qualified Data.List.NonEmpty as N
+import Discord.Types (GuildMember(..))
+import qualified Data.List.NonEmpty as NE
 import qualified Data.Text as T
 import qualified Discord.Types as D
-import Control.Monad.IO.Class (MonadIO(..))
-import Discord.Types (GuildMember(..))
 
 -- Messages {{{
 helpMessageUser, helpMessageAdmin  :: Text
@@ -86,10 +86,25 @@ getSingleUserScores discordUser = \case
          . unValue
          . fromMaybe (Value 0)
          $ results
+
+titleCaseGames :: Command -> Command
+titleCaseGames = let t = T.toTitle in \case
+  Iwon game                        -> Iwon (t game)
+  Setscore uid_maybe scoreMod game -> Setscore uid_maybe scoreMod (t game)
+  Amiwinning (Just game)           -> Amiwinning (Just (t game))
+  Aretheywinning uid (Just game)   -> Aretheywinning uid (Just (t game))
+  Whoiswinning (Just game)         -> Whoiswinning (Just (t game))
+  Theywon uid game                 -> Theywon uid (t game)
+  Addgame game                     -> Addgame (t game)
+  Rmgame game                      -> Rmgame (t game)
+  Mergegames games                 -> Mergegames (NE.nub . NE.map t $ games)
+  Renamegame oldName newName       -> Renamegame (t oldName) (t newName)
+  other                            -> other
 -- }}}
 
 handleCommand :: D.GuildMember -> D.RoleId -> Command -> DiscordHandler Status
-handleCommand thisMember adminRoleId cmd = let
+handleCommand thisMember adminRoleId cmd_raw = let
+  cmd                   = titleCaseGames cmd_raw
   thisUser              = (fromJust . D.memberUser) thisMember
   isAdmin               = adminRoleId `elem` D.memberRoles thisMember
   adminCheck authAction = if isAdmin then authAction else pure $ Failure UserNotAdminError
@@ -228,10 +243,10 @@ handleCommand thisMember adminRoleId cmd = let
       gamesQueried  <- forM gNames $ getBy . UniqueGameName
       let (targetName   :| _) = gNames
           (target_maybe :| _) = gamesQueried
-          gamesZip   = N.zip gamesQueried gNames
+          gamesZip   = NE.zip gamesQueried gNames
           gamesFound :: ([Entity Game], [Text]) -- ([Games found], [Game names missing])
           gamesFound = bimap (map (fromJust . fst)) (map snd) $
-                         N.partition (isJust . fst) gamesZip
+                         NE.partition (isJust . fst) gamesZip
       (Entity targetId _, toMerge, new) <- case target_maybe of
         Just t  -> pure (t, tail (fst gamesFound), False)
         Nothing -> insertEntity (Game targetName) <&> (, fst gamesFound, True)
